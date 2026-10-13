@@ -46,13 +46,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 #clearTitle{font-size:30px;background:linear-gradient(90deg,#ffd97a,#ff9ecf,#8fd3ff,#a6f0a0);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:.04em}
 @keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .stream{position:fixed;width:5px;border-radius:3px;pointer-events:none;z-index:15;transform-origin:50% 0}
-footer{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:8px 0 18px}
+footer{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:8px 0 18px}
 .tool{background:var(--glass);border:1px solid rgba(255,255,255,.14);color:var(--fg);border-radius:14px;padding:9px 4px;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;font-family:inherit}
 .tool b{font-size:20px;font-weight:400;line-height:1.2}
 .tool .n{font-size:11px;color:var(--muted)}
 .tool:disabled{opacity:.35}
 .toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:rgba(18,28,48,.94);border:1px solid rgba(255,255,255,.15);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:60;max-width:88vw;text-align:center}
 .toast.show{opacity:1}
+.demo-bar{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 64px);transform:translateX(-50%);background:rgba(255,226,140,.14);border:1px solid rgba(255,226,140,.5);color:#ffe7a8;padding:7px 14px;border-radius:999px;font-size:13px;z-index:30;display:none;white-space:nowrap}
+.demo-bar.on{display:block}
+body.demo footer .tool:not(#btnDemo){opacity:.35;pointer-events:none}
 .modal{position:fixed;inset:0;background:rgba(5,10,20,.6);display:none;align-items:center;justify-content:center;z-index:70;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 .modal.open{display:flex}
 .card{background:#16233a;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:22px;width:min(340px,90vw);text-align:center;max-height:90vh;overflow:auto}
@@ -82,10 +85,12 @@ input[type=range]{width:100%;margin-top:6px}
     <button class="tool" id="btnHint"><b>💡</b>ヒント<span class="n" id="nHint"></span></button>
     <button class="tool" id="btnAdd"><b>＋</b>試験管<span class="n" id="nAdd"></span></button>
     <button class="tool" id="btnRestart"><b>⟳</b>やり直し<span class="n">&nbsp;</span></button>
+    <button class="tool" id="btnDemo"><b>▶</b>お手本<span class="n">&nbsp;</span></button>
   </footer>
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="demo-bar" id="demoBar">お手本を再生中… 画面タップで止める</div>
 <canvas id="fx"></canvas>
 
 <div class="modal" id="mAsk"><div class="card">
@@ -323,6 +328,7 @@ const KEY='shizuku-sort-v1';
 const DEFAULT={v:1, level:1, best:1, cleared:0, vol:0.7, muted:false, cur:null};
 let data = (()=>{ try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d && d.v===1) return Object.assign({},DEFAULT,d); }catch(e){} return Object.assign({},DEFAULT); })();
 function save(){
+  if(demo) return;   // お手本の最中は記録しない
   data.t=Date.now();
   try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){}
   Cloud.push();
@@ -366,7 +372,7 @@ const Cloud={
 const $=id=>document.getElementById(id);
 const board=$('board');
 const UNDO_MAX=5, HINT_MAX=3;
-let S=null, tubeEls=[], sel=null, busy=false;
+let S=null, tubeEls=[], sel=null, busy=false, demo=false, demoStop=false;
 
 function clone(t){ return t.map(a=>a.slice()); }
 function initialHidden(tubes,visible){ return tubes.map(a=>a.map((c,k)=>k < a.length-visible)); }
@@ -601,6 +607,7 @@ function clearHints(){ tubeEls.forEach(e=>e&&e.classList.remove('hint')); }
 
 function onTap(i){
   Sound.init();
+  if(demo){ demoStop=true; return; }
   if(busy) return;
   clearHints();
   const t=S.tubes;
@@ -697,6 +704,7 @@ async function doPour(i,j){
   if(isComplete(S.tubes[j],cap)) Sound.complete();
   save(); updateUI(); busy=false;
 
+  if(demo) return;
   if(isSolved(S.tubes,cap)) return win();
   if(!hasAnyMove(S.tubes,cap)) toast('手詰まりかも…「戻す」か「試験管」を使おう',3200);
 }
@@ -761,6 +769,35 @@ $('btnRestart').onclick=async()=>{
   S.tubes=clone(S.init); S.hid=initialHidden(S.init,S.visible); S.history=[]; S.added=false; S.moves=0;
   save(); buildBoard(); Sound.tok(false);
 };
+// お手本：今のレベルを最初から自動で解いて見せる。終わったら自分の途中の状態に戻す
+$('btnDemo').onclick=async()=>{
+  Sound.init();
+  if(demo){ demoStop=true; return; }
+  if(busy) return;
+  const sol=solve(S.init,S.cap,300000);
+  if(!sol.ok){ toast('お手本を作れませんでした'); return; }
+  const backup={tubes:clone(S.tubes), hid:clone(S.hid), history:S.history.map(h=>({tubes:clone(h.tubes),hid:clone(h.hid)})), added:S.added, moves:S.moves};
+  demo=true; demoStop=false; document.body.classList.add('demo'); $('demoBar').classList.add('on');
+  $('btnDemo').querySelector('b').textContent='■';
+  S.tubes=clone(S.init); S.hid=initialHidden(S.init,S.visible); S.history=[]; S.added=false; S.moves=0;
+  buildBoard(); updateUI();
+  await wait(700);
+  for(const [a,b] of sol.path){
+    if(demoStop) break;
+    setSel(a); Sound.tok(true); await wait(260);
+    if(demoStop){ setSel(null); break; }
+    await doPour(a,b); updateUI();
+    await wait(220);
+  }
+  if(!demoStop){ await wait(900); }
+  // 自分の状態に戻す
+  demo=false; demoStop=false; document.body.classList.remove('demo'); $('demoBar').classList.remove('on');
+  $('btnDemo').querySelector('b').textContent='▶';
+  Object.assign(S, backup); busy=false;
+  buildBoard(); updateUI();
+  toast('お手本おわり。続きからどうぞ',2000);
+};
+document.addEventListener('pointerdown',e=>{ if(demo && !e.target.closest('#btnDemo')) demoStop=true; });
 $('btnHint').onclick=()=>{
   Sound.init(); if(busy||!S.hints) return;
   busy=true; toast('考え中…',900);
