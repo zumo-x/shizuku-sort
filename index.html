@@ -88,6 +88,12 @@ input[type=range]{width:100%;margin-top:6px}
 <div class="toast" id="toast"></div>
 <canvas id="fx"></canvas>
 
+<div class="modal" id="mAsk"><div class="card">
+  <p id="askMsg" style="color:var(--fg);font-size:16px;margin:4px 0 10px"></p>
+  <button class="btn" id="askYes">はい</button>
+  <button class="btn ghost" id="askNo">やめる</button>
+</div></div>
+
 <div class="modal" id="mClear"><div class="card">
   <h2 id="clearTitle">クリア！</h2>
   <p id="clearInfo"></p>
@@ -575,6 +581,15 @@ function updateUI(){
   $('nAdd').textContent=S.added?'使用済み':'1回だけ'; $('btnAdd').disabled=S.added;
 }
 
+// 確認画面（ブラウザ標準の確認は Claude のページ内などで動かないので自前で出す）
+function ask(msg,yes='はい'){
+  return new Promise(res=>{
+    $('askMsg').textContent=msg; $('askYes').textContent=yes;
+    const m=$('mAsk'); m.classList.add('open');
+    const done=v=>{ m.classList.remove('open'); $('askYes').onclick=$('askNo').onclick=null; res(v); };
+    $('askYes').onclick=()=>done(true); $('askNo').onclick=()=>done(false);
+  });
+}
 let toastT=null;
 function toast(msg,ms=2200){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),ms); }
 function shake(i){ const el=tubeEls[i]; el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
@@ -739,9 +754,10 @@ $('btnAdd').onclick=()=>{
   S.added=true; S.tubes.push([]); S.hid.push([]); S.history.forEach(h=>{h.tubes.push([]);h.hid.push([]);});
   Sound.tok(true); save(); buildBoard();
 };
-$('btnRestart').onclick=()=>{
+$('btnRestart').onclick=async()=>{
   Sound.init(); if(busy) return;
-  if(!confirm('このレベルを最初からやり直しますか？')) return;
+  if(!await ask('このレベルを最初からやり直しますか？','やり直す')) return;
+  if(busy) return;
   S.tubes=clone(S.init); S.hid=initialHidden(S.init,S.visible); S.history=[]; S.added=false; S.moves=0;
   save(); buildBoard(); Sound.tok(false);
 };
@@ -780,8 +796,9 @@ $('btnImport').onclick=()=>{
     $('mSettings').classList.remove('open'); toast(`Lv ${data.level} から再開します`); startLevel(data.level);
   }catch(e){ toast('コードが正しくないみたい'); }
 };
-$('btnReset').onclick=()=>{
-  if(!confirm('レベルの進み具合も含めて全部消します。いいですか？')) return;
+$('btnReset').onclick=async()=>{
+  $('mSettings').classList.remove('open');
+  if(!await ask('レベルの進み具合も含めて全部消します。いいですか？','全部消す')) return;
   const keep={vol:data.vol,muted:data.muted}; data=Object.assign({},DEFAULT,keep); save();
   $('mSettings').classList.remove('open'); startLevel(1);
 };
