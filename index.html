@@ -307,7 +307,45 @@ const Sound = {
 const KEY='shizuku-sort-v1';
 const DEFAULT={v:1, level:1, best:1, cleared:0, vol:0.7, muted:false, cur:null};
 let data = (()=>{ try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d && d.v===1) return Object.assign({},DEFAULT,d); }catch(e){} return Object.assign({},DEFAULT); })();
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){} }
+function save(){
+  data.t=Date.now();
+  try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){}
+  Cloud.push();
+}
+// Claudeのページで遊ぶ時は、自分専用のクラウド保存にも記録する（ブラウザの記録が消えても戻せるように）
+// GitHub Pages などでは何もしない（ブラウザ保存だけで動く）
+const Cloud={
+  ref:null, timer:null, last:'',
+  async connect(){
+    try{
+      if(!window.claude || !window.claude.use) return null;
+      const [db,user]=await Promise.all([claude.use('db'), claude.use('user')]);
+      if(!db || !user) return null;
+      const uid=await user.id(); if(!uid) return null;
+      this.ref=db.doc('data/users/'+uid+'/save');
+      return this.ref;
+    }catch(e){ return null; }
+  },
+  pack(){
+    const cur = data.cur ? Object.assign({}, data.cur, {history:[]}) : null;
+    return {level:data.level, best:data.best, cleared:data.cleared, vol:data.vol, muted:!!data.muted,
+            t:data.t||0, cur: cur?JSON.stringify(cur):''};
+  },
+  push(){
+    if(!this.ref) return;
+    clearTimeout(this.timer);
+    this.timer=setTimeout(()=>{
+      const body=this.pack(), key=JSON.stringify(body);
+      if(key===this.last) return;
+      this.last=key;
+      this.ref.set(body).catch(()=>{ this.last=''; });
+    },800);
+  },
+  async pull(){
+    if(!this.ref) return null;
+    try{ const snap=await this.ref.get(); return snap.exists ? snap.data() : null; }catch(e){ return null; }
+  }
+};
 
 // ===================== ゲーム本体 =====================
 const $=id=>document.getElementById(id);
@@ -668,6 +706,25 @@ let rz=null; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTime
 Sound.vol=data.vol; Sound.muted=data.muted;
 if(data.cur && data.cur.lv===data.level && data.cur.tubes){ S=data.cur; requestAnimationFrame(buildBoard); }
 else startLevel(data.level);
+
+// クラウドの記録の方が新しければ、そちらで続きから
+(async()=>{
+  if(!await Cloud.connect()) return;
+  const c=await Cloud.pull();
+  const localT=data.t||0;
+  if(c && (c.t||0) > localT && Number.isInteger(c.level) && c.level>=1){
+    let cur=null; try{ cur=c.cur?JSON.parse(c.cur):null; }catch(e){}
+    Object.assign(data,{level:c.level, best:Math.max(c.best||1,c.level), cleared:c.cleared|0,
+      vol:typeof c.vol==='number'?c.vol:data.vol, muted:!!c.muted, t:c.t, cur});
+    try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){}
+    Sound.vol=data.vol; Sound.muted=data.muted; Sound.applyVol();
+    const go=()=>{ if(busy){ setTimeout(go,300); return; }
+      if(data.cur && data.cur.lv===data.level && data.cur.tubes){ S=data.cur; buildBoard(); } else startLevel(data.level); };
+    go();
+  } else {
+    Cloud.push();   // 手元の方が新しい（または初回）ならクラウドへ
+  }
+})();
 </script>
 </body>
 </html>
