@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>しずくソート</title>
+<meta name="theme-color" content="#0e1524">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="しずくソート">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+:root{--bg1:#0e1524;--fg:#e8eef8;--muted:#9aa8bf;--glass:rgba(255,255,255,.07);--rim:rgba(210,228,255,.42);--tw:48px;--u:38px;--cap:4;--gap:12px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:radial-gradient(120% 70% at 50% 0%,#253b5f 0%,var(--bg1) 62%) fixed,var(--bg1);color:var(--fg);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;user-select:none;-webkit-user-select:none;overflow:hidden;touch-action:manipulation}
+.app{display:flex;flex-direction:column;height:100%;max-width:640px;margin:0 auto;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom)}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 0 4px}
+.lv{font-size:22px;font-weight:700;letter-spacing:.02em}
+.sub{font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tag{border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:1px 8px}
+.tag.hid{border-color:rgba(255,220,150,.5);color:#ffe2a8}
+.iconbtn{background:var(--glass);border:1px solid rgba(255,255,255,.15);color:var(--fg);border-radius:12px;width:42px;height:42px;font-size:20px;cursor:pointer}
+.board{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:34px;min-height:0}
+.row{display:flex;gap:var(--gap);justify-content:center}
+.tube{position:relative;width:var(--tw);height:calc(var(--u)*var(--cap) + 12px);transition:transform .18s ease;cursor:pointer;will-change:transform}
+.tube .lip{position:absolute;top:-4px;left:-4px;right:-4px;height:7px;border-radius:4px;background:rgba(220,235,255,.22);border:1px solid rgba(235,245,255,.5);z-index:2}
+.tube .glass{position:absolute;inset:0;border:2px solid var(--rim);border-top:none;border-radius:3px 3px calc(var(--tw)/2) calc(var(--tw)/2);overflow:hidden;background:linear-gradient(90deg,rgba(255,255,255,.10),rgba(255,255,255,.025) 40%,rgba(255,255,255,.07));transition:box-shadow .4s}
+.tube .glass::after{content:"";position:absolute;top:6px;bottom:10px;left:16%;width:12%;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,.06));pointer-events:none;z-index:3}
+.tube canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;display:block}
+.tube.sel{transform:translateY(-18px)}
+.tube.done .glass{box-shadow:0 0 16px rgb(var(--dc)/.45),inset 0 0 12px rgb(var(--dc)/.22)}
+.tube.hint{animation:hintp .9s ease-in-out 3}
+@keyframes hintp{50%{filter:drop-shadow(0 0 12px #ffe7a0)}}
+.tube.shake{animation:shake .28s}
+@keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.stream{position:fixed;width:5px;border-radius:3px;pointer-events:none;z-index:15;transform-origin:50% 0}
+footer{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:8px 0 18px}
+.tool{background:var(--glass);border:1px solid rgba(255,255,255,.14);color:var(--fg);border-radius:14px;padding:9px 4px;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;font-family:inherit}
+.tool b{font-size:20px;font-weight:400;line-height:1.2}
+.tool .n{font-size:11px;color:var(--muted)}
+.tool:disabled{opacity:.35}
+.toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);background:rgba(18,28,48,.94);border:1px solid rgba(255,255,255,.15);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:60;max-width:88vw;text-align:center}
+.toast.show{opacity:1}
+.modal{position:fixed;inset:0;background:rgba(5,10,20,.6);display:none;align-items:center;justify-content:center;z-index:70;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.modal.open{display:flex}
+.card{background:#16233a;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:22px;width:min(340px,90vw);text-align:center;max-height:90vh;overflow:auto}
+.card h2{margin:0 0 6px;font-size:22px}
+.card p{color:var(--muted);font-size:14px;margin:6px 0}
+.card label{display:block;text-align:left;font-size:13px;color:var(--muted);margin-top:14px}
+.btn{background:#3a6ea6;border:none;color:#fff;border-radius:12px;padding:12px 18px;font-size:15px;width:100%;margin-top:10px;cursor:pointer;font-family:inherit}
+.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
+.btn.danger{background:transparent;border:1px solid rgba(255,120,120,.4);color:#ffb3b3}
+textarea{width:100%;height:70px;background:#0e1626;color:var(--fg);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:8px;font-size:11px;margin-top:6px;user-select:text;-webkit-user-select:text}
+input[type=range]{width:100%;margin-top:6px}
+.loading{color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <div class="lv" id="lvText">Lv 1</div>
+      <div class="sub" id="subText"></div>
+    </div>
+    <button class="iconbtn" id="btnSettings" aria-label="設定">⚙︎</button>
+  </header>
+  <div class="board" id="board"><div class="loading">準備中…</div></div>
+  <footer>
+    <button class="tool" id="btnUndo"><b>↶</b>戻す<span class="n" id="nUndo"></span></button>
+    <button class="tool" id="btnHint"><b>💡</b>ヒント<span class="n" id="nHint"></span></button>
+    <button class="tool" id="btnAdd"><b>＋</b>試験管<span class="n" id="nAdd"></span></button>
+    <button class="tool" id="btnRestart"><b>⟳</b>やり直し<span class="n">&nbsp;</span></button>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal" id="mClear"><div class="card">
+  <h2 id="clearTitle">クリア！</h2>
+  <p id="clearInfo"></p>
+  <button class="btn" id="btnNext">次のレベルへ</button>
+</div></div>
+
+<div class="modal" id="mSettings"><div class="card">
+  <h2>設定</h2>
+  <label>音量 <span id="volLabel"></span><input type="range" id="vol" min="0" max="100"></label>
+  <button class="btn ghost" id="btnMute"></button>
+  <label>セーブデータの引っ越し（別の端末へ）</label>
+  <textarea id="saveCode" placeholder="ここにコードを貼り付けて「読み込む」"></textarea>
+  <button class="btn ghost" id="btnExport">今のデータをコードにする</button>
+  <button class="btn ghost" id="btnImport">コードを読み込む</button>
+  <button class="btn danger" id="btnReset">データを全部消す</button>
+  <button class="btn" id="btnClose">閉じる</button>
+</div></div>
+
+<script>
+// ===================== CORE-START（ゲームのルールと自動生成・ソルバー） =====================
+// 液の色（R G B）。白っぽい色は「空」と紛らわしいので使わない
+const PALETTE = ['255 90 90','255 158 60','255 212 60','150 222 85','40 188 108','30 196 186',
+                 '90 196 255','70 110 255','152 98 255','255 110 196','186 128 78','124 140 44'];
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+// レベルごとの難しさ
+function levelConfig(lv){
+  const colors  = Math.min(12, 3 + Math.floor((lv-1)/3));   // 3色 → 最大12色
+  const cap     = lv >= 36 ? 5 : 4;                          // Lv36〜 1本5層に
+  const visible = lv < 8 ? cap : (lv < 15 ? 2 : 1);          // Lv8〜 下が隠れる / Lv15〜 一番上しか見えない
+  return {colors, cap, empty: 2, visible};
+}
+
+function topRun(a){ if(!a.length) return 0; const c=a[a.length-1]; let r=1; while(r<a.length && a[a.length-1-r]===c) r++; return r; }
+function isComplete(a,cap){ return a.length===cap && a.every(c=>c===a[0]); }
+function isSolved(t,cap){ return t.every(a=>a.length===0 || isComplete(a,cap)); }
+function canPour(t,i,j,cap){
+  if(i===j) return false; const a=t[i], b=t[j];
+  if(!a.length || b.length>=cap) return false;
+  return !b.length || b[b.length-1]===a[a.length-1];
+}
+function pourAmount(t,i,j,cap){ return Math.min(topRun(t[i]), cap - t[j].length); }
+function hasAnyMove(t,cap){
+  for(let i=0;i<t.length;i++){ if(isComplete(t[i],cap)) continue;
+    for(let j=0;j<t.length;j++){ if(!canPour(t,i,j,cap)) continue;
+      if(!t[j].length && topRun(t[i])===t[i].length) continue; // 単色をカラに移すだけは意味なし
+      return true; } }
+  return false;
+}
+
+// 深さ優先ソルバー（同じ局面は二度調べない）
+function solve(start, cap, limit=150000){
+  const seen=new Set(); let nodes=0, aborted=false; const path=[];
+  const key=t=>t.map(a=>a.map(c=>String.fromCharCode(97+c)).join('')).sort().join('|');
+  function gen(t){
+    const res=[];
+    for(let i=0;i<t.length;i++){
+      const a=t[i]; if(!a.length || isComplete(a,cap)) continue;
+      const run=topRun(a), top=a[a.length-1]; let emptyDone=false;
+      for(let j=0;j<t.length;j++){
+        if(j===i) continue; const b=t[j]; if(b.length>=cap) continue;
+        if(!b.length){ if(run===a.length || emptyDone) continue; emptyDone=true; res.push([i,j,1]); }
+        else if(b[b.length-1]===top){
+          const amt=Math.min(run,cap-b.length);
+          res.push([i,j, amt===run ? (topRun(b)===b.length?4:3) : 2]);
+        }
+      }
+    }
+    res.sort((x,y)=>y[2]-x[2]); return res;
+  }
+  function dfs(t,depth){
+    if(isSolved(t,cap)) return true;
+    if(++nodes>limit){ aborted=true; return false; }
+    if(depth>600) return false;
+    const k=key(t); if(seen.has(k)) return false; seen.add(k);
+    for(const [i,j] of gen(t)){
+      const n=t.map(a=>a.slice()); const amt=Math.min(topRun(n[i]),cap-n[j].length);
+      for(let q=0;q<amt;q++) n[j].push(n[i].pop());
+      path.push([i,j]);
+      if(dfs(n,depth+1)) return true;
+      path.pop(); if(aborted) return false;
+    }
+    return false;
+  }
+  const ok=dfs(start.map(a=>a.slice()),0);
+  return {ok, path: ok?path.slice():null, aborted, nodes};
+}
+
+// レベル生成：同じレベル番号なら誰がやっても同じ盤面（友だちと比べられる）
+function generateLevel(lv){
+  const cfg=levelConfig(lv);
+  const rnd=mulberry32(((lv*2654435761)>>>0) ^ 0x5bd1e995);
+  const maxPairs=Math.max(1, Math.floor(cfg.colors*0.3));
+  const wantNodes = lv<4 ? 0 : Math.min(1500, lv*35);   // ソルバーが「迷った量」= 難しさの目安
+  let best=null;
+  for(let at=0; at<400; at++){
+    const balls=[]; for(let c=0;c<cfg.colors;c++) for(let k=0;k<cfg.cap;k++) balls.push(c);
+    for(let i=balls.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [balls[i],balls[j]]=[balls[j],balls[i]]; }
+    const tubes=[]; for(let i=0;i<cfg.colors;i++) tubes.push(balls.slice(i*cfg.cap,(i+1)*cfg.cap));
+    for(let e=0;e<cfg.empty;e++) tubes.push([]);
+    let pairs=0, bad=false;
+    for(const a of tubes) for(let k=1;k<a.length;k++){ if(a[k]===a[k-1]){ pairs++; if(k>=2 && a[k]===a[k-2]) bad=true; } }
+    if(bad || pairs > maxPairs + Math.floor(at/80)) continue;
+    const r=solve(tubes,cfg.cap,80000);
+    if(!r.ok) continue;
+    if(!best || r.nodes>best.nodes) best={tubes,nodes:r.nodes};
+    if(r.nodes >= wantNodes*Math.max(0.3, 1-at/300)) return {cfg, tubes};
+  }
+  return {cfg, tubes: best.tubes};
+}
+// ===================== CORE-END =====================
+
+// ===================== WATER-START 録音が無い時の注ぐ音（急須からお茶を注ぐ音のまね） =====================
+// sounds/pour.mp3（本物の録音）があればそちらを使う。無い時だけ、泡の音を重ねて「ちょろちょろ・とぽとぽ」を作る（ザーッというノイズは使わない）。
+function makeWaterBuffer(sr, seconds, seed){
+  const rnd=mulberry32(seed), N=Math.floor(sr*seconds), out=new Float32Array(N);
+  const addBubble=(t0,r,amp)=>{
+    const f0=3/r, d=0.043*f0+0.0014*Math.pow(f0,1.5), sig=0.1*d;
+    const len=Math.min(N-t0, Math.floor(sr*5/d)); let ph=0;
+    for(let k=0;k<len;k++){ const t=k/sr; ph+=2*Math.PI*f0*(1+sig*t)/sr;
+      out[t0+k]+=amp*(k<20?k/20:1)*Math.sin(ph)*Math.exp(-d*t); }
+  };
+  let t=0;
+  while((t+= -Math.log(1-rnd())/170) < seconds){            // 細かい泡（約1000〜2500Hz）
+    const r=0.0012+0.0018*Math.pow(rnd(),1.4);
+    addBubble(Math.floor(t*sr), r, 0.06*(0.3+0.7*rnd()));
+  }
+  t=0;
+  while((t+= -Math.log(1-rnd())/22) < seconds){             // 少し大きめの泡「とぽ」（約600〜1000Hz）
+    addBubble(Math.floor(t*sr), 0.003+0.002*rnd(), 0.09*(0.4+0.6*rnd()));
+  }
+  let pk=0; for(let k=0;k<N;k++) pk=Math.max(pk,Math.abs(out[k]));
+  for(let k=0;k<N;k++) out[k]=out[k]/pk*0.9;
+  return out;
+}
+// ===================== WATER-END =====================
+
+// ===================== サウンド（Web Audio で合成・高音を抑えた水の音） =====================
+const Sound = {
+  ctx:null, out:null, noise:null, vol:0.7, muted:false,
+  init(){
+    if(this.ctx){ if(this.ctx.state==='suspended') this.ctx.resume(); return; }
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    const ctx=this.ctx=new AC();
+    const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2600; lp.Q.value=0.5; // キンキンする帯域をカット
+    const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-20; comp.ratio.value=3;
+    this.out=ctx.createGain(); this.applyVol();
+    this.out.connect(lp); lp.connect(comp); comp.connect(ctx.destination);
+    this.pourOut=ctx.createGain(); this.pourOut.connect(comp); this.applyVol(); // 注ぐ音は4kHzまで通す（水流のさらさら感のため）
+    const len=ctx.sampleRate*2, buf=ctx.createBuffer(1,len,ctx.sampleRate), d=buf.getChannelData(0);
+    let last=0; for(let i=0;i<len;i++){ last=(last+0.06*(Math.random()*2-1))/1.06; d[i]=last*3.2; } // ブラウンノイズ＝柔らかい水音
+    this.noise=buf;
+    const wb=ctx.createBuffer(1,len,ctx.sampleRate), w=wb.getChannelData(0);
+    for(let i=0;i<len;i++) w[i]=Math.random()*2-1;
+    this.white=wb;
+    setTimeout(()=>{ if(!this.water) this.makeWater(); },0);
+  },
+  applyVol(){ const v=this.muted?0:this.vol*0.9; if(this.out) this.out.gain.value=v; if(this.pourOut) this.pourOut.gain.value=v; },
+  env(g,t,a,peak,dec){ g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(peak,t+a); g.gain.exponentialRampToValueAtTime(0.0001,t+a+dec); },
+  tone(type,f,t,a,peak,dec,f2){
+    const c=this.ctx, o=c.createOscillator(), g=c.createGain();
+    o.type=type; o.frequency.setValueAtTime(f,t); if(f2) o.frequency.exponentialRampToValueAtTime(f2,t+a+dec*0.6);
+    this.env(g,t,a,peak,dec); o.connect(g); g.connect(this.out); o.start(t); o.stop(t+a+dec+0.05);
+  },
+  tok(up=true){ if(!this.ctx) return; const t=this.ctx.currentTime; // 木のようなコトッ
+    this.tone('sine', up?330:250, t, 0.004, 0.22, 0.09, up?230:170); },
+  bump(){ if(!this.ctx) return; const t=this.ctx.currentTime; this.tone('sine',130,t,0.005,0.25,0.16,80); },
+  // 水の音のもと：起動時に3種類つくっておき、毎回ちがう場所を切り出して使う
+  makeWater(){
+    const c=this.ctx; this.water=[];
+    for(let s=0;s<3;s++){
+      const d=makeWaterBuffer(c.sampleRate, 3.2, 1234+s*777);
+      const b=c.createBuffer(1,d.length,c.sampleRate); b.getChannelData(0).set(d); this.water.push(b);
+    }
+    // sounds/pour.mp3 などを置けば、本物の録音を優先して使う（GitHub Pagesで公開した時に有効）
+    if(location.protocol.startsWith('http')) for(const ext of ['mp3','ogg','wav']){
+      fetch('sounds/pour.'+ext).then(r=>r.ok?r.arrayBuffer():Promise.reject())
+        .then(a=>c.decodeAudioData(a)).then(b=>{ if(!this.real) this.real=b; }).catch(()=>{});
+    }
+  },
+  bubble(t,f,amp,len){
+    const c=this.ctx, o=c.createOscillator(), g=c.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(f,t); o.frequency.exponentialRampToValueAtTime(f*1.3,t+len);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(amp,t+0.004); g.gain.exponentialRampToValueAtTime(0.0001,t+len);
+    o.connect(g); g.connect(this.out); o.start(t); o.stop(t+len+0.02);
+  },
+  // 注ぐ音
+  //  本物の録音（sounds/pour.mp3）がある時：録音をそのまま、注ぐ長さに合わせて切り出す
+  //  無い時：泡の音で作った「ちょろちょろ・とぽとぽ」
+  pour(dur,f0,f1){ if(!this.ctx) return; const c=this.ctx, t=c.currentTime+0.01, out=this.pourOut||this.out;
+    if(!this.water) this.makeWater();
+    if(this.real){
+      const buf=this.real, s=c.createBufferSource(), g=c.createGain(); s.buffer=buf;
+      const len=Math.min(buf.duration, dur+0.35), off=Math.random()*Math.max(0, buf.duration-len-0.1);
+      g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.9,t+0.05);
+      g.gain.setValueAtTime(0.9,t+len-0.3); g.gain.exponentialRampToValueAtTime(0.0001,t+len);
+      s.connect(g); g.connect(out); s.start(t,off); s.stop(t+len+0.05);
+      return;
+    }
+    const buf=this.water[Math.floor(Math.random()*this.water.length)];
+    const s=c.createBufferSource(); s.buffer=buf;
+    const rate=f=>0.94+f*0.16;
+    s.playbackRate.setValueAtTime(rate(f0),t); s.playbackRate.linearRampToValueAtTime(rate(f1),t+dur);
+    const cup=c.createBiquadFilter(); cup.type='peaking'; cup.Q.value=2.2; cup.gain.value=9;   // 湯のみが満ちるほど響きが上がる
+    const cf=f=>650+f*1100;
+    cup.frequency.setValueAtTime(cf(f0),t); cup.frequency.linearRampToValueAtTime(cf(f1),t+dur);
+    const lp=c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=4000; lp.Q.value=0.4;
+    const g=c.createGain(), peak=0.55;
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(peak*0.5,t+0.03); g.gain.linearRampToValueAtTime(peak,t+0.12);
+    g.gain.setValueAtTime(peak,t+dur-0.05); g.gain.linearRampToValueAtTime(peak*0.35,t+dur+0.06); g.gain.exponentialRampToValueAtTime(0.0001,t+dur+0.2);
+    s.connect(cup); cup.connect(lp); lp.connect(g); g.connect(out);
+    const off=Math.random()*Math.max(0,buf.duration-(dur+0.4));
+    s.start(t,off); s.stop(t+dur+0.3);
+    const f=900+f1*500; this.bubble(t+dur+0.12,f,0.05,0.05); if(Math.random()<0.6) this.bubble(t+dur+0.27,f*1.1,0.03,0.045);
+  },
+  complete(){ if(!this.ctx) return; const t=this.ctx.currentTime; // ガラスの柔らかい響き
+    [392,493.9,587.3].forEach((f,k)=>this.tone('sine',f,t+k*0.07,0.02,0.09,1.3)); },
+  clear(){ if(!this.ctx) return; const t=this.ctx.currentTime;
+    [261.6,329.6,392,523.3].forEach((f,k)=>{ this.tone('triangle',f,t+k*0.12,0.02,0.11,1.0); this.tone('sine',f/2,t+k*0.12,0.03,0.06,1.2); });
+    this.tone('sine',392,t+0.5,0.25,0.07,1.8); },
+  hint(){ if(!this.ctx) return; const t=this.ctx.currentTime; this.tone('sine',440,t,0.03,0.08,0.5); this.tone('sine',523.3,t+0.12,0.03,0.07,0.6); }
+};
+
+// ===================== セーブデータ =====================
+const KEY='shizuku-sort-v1';
+const DEFAULT={v:1, level:1, best:1, cleared:0, vol:0.7, muted:false, cur:null};
+let data = (()=>{ try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d && d.v===1) return Object.assign({},DEFAULT,d); }catch(e){} return Object.assign({},DEFAULT); })();
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){} }
+
+// ===================== ゲーム本体 =====================
+const $=id=>document.getElementById(id);
+const board=$('board');
+const UNDO_MAX=5, HINT_MAX=3;
+let S=null, tubeEls=[], sel=null, busy=false;
+
+function clone(t){ return t.map(a=>a.slice()); }
+function initialHidden(tubes,visible){ return tubes.map(a=>a.map((c,k)=>k < a.length-visible)); }
+
+// ===================== 液体の描画（キャンバス） =====================
+// 試験管を傾けても水面は常に水平・量は一定、になるように形から計算して描く
+const DPR=Math.min(2,window.devicePixelRatio||1);
+const GEO={W:0,H:0,u:0,poly0:null,A:[]};
+let canvases=[], over=[], waves=[], bubbles=[];
+function rot(p,a){ const c=Math.cos(a), s=Math.sin(a); return [p[0]*c-p[1]*s, p[0]*s+p[1]*c]; }
+function makePoly(W,H){
+  const r=W/2, cy=H/2, by=H-r-cy, pts=[[-W/2,-cy],[W/2,-cy],[W/2,by]];
+  for(let k=1;k<18;k++){ const a=Math.PI*k/18; pts.push([Math.cos(a)*r, by+Math.sin(a)*r]); }
+  pts.push([-W/2,by]); return pts;
+}
+function polyAt(phi){ return phi ? GEO.poly0.map(p=>rot(p,phi)) : GEO.poly0; }
+function areaBelow(poly,L){
+  const o=[];
+  for(let i=0;i<poly.length;i++){ const a=poly[i], b=poly[(i+1)%poly.length], ia=a[1]>=L, ib=b[1]>=L;
+    if(ia) o.push(a); if(ia!==ib){ const t=(L-a[1])/(b[1]-a[1]); o.push([a[0]+(b[0]-a[0])*t, L]); } }
+  let s=0; for(let i=0;i<o.length;i++){ const a=o[i], b=o[(i+1)%o.length]; s+=a[0]*b[1]-b[0]*a[1]; }
+  return Math.abs(s)/2;
+}
+function polyRange(poly){ let lo=Infinity, hi=-Infinity; for(const p of poly){ if(p[1]<lo) lo=p[1]; if(p[1]>hi) hi=p[1]; } return [lo,hi]; }
+function levelFor(poly,A){
+  const [lo,hi]=polyRange(poly); if(A<=0) return hi;
+  let a=lo, b=hi; for(let k=0;k<24;k++){ const m=(a+b)/2; if(areaBelow(poly,m)>A) a=m; else b=m; } return (a+b)/2;
+}
+function areaForVol(v){ const A=GEO.A, n=A.length-1; v=Math.max(0,Math.min(n,v)); const k=Math.min(n-1,Math.floor(v)); return A[k]+(v-k)*(A[k+1]-A[k]); }
+// 液が注ぎ口のフチに届く角度（残りが少ないほど深く傾ける＝本物と同じ）
+function pourAngle(v,dir){
+  const A=areaForVol(v), lip=[dir*GEO.W/2, -GEO.H/2];
+  for(let th=15; th<=140; th+=1.5){
+    const phi=dir*th*Math.PI/180, L=levelFor(polyAt(phi),A), lp=rot(lip,phi);
+    if(lp[1] >= L-0.5) return th;
+  }
+  return 140;
+}
+function uprightLevel(v){ return levelFor(GEO.poly0, areaForVol(v)); }
+function rgba(c,a){ return `rgba(${c.split(' ').join(',')},${a})`; }
+function shake2(i,amp){ if(!waves[i]) waves[i]={amp:0,hold:false,ph:Math.random()*6}; waves[i].amp=Math.max(waves[i].amp,amp); }
+
+function drawTube(i){
+  const cv=canvases[i]; if(!cv || !S) return;
+  const ctx=cv.getContext('2d'), {W,H}=GEO;
+  const o=over[i], cols=o?o.colors:S.tubes[i], hid=o?o.hid:S.hid[i], vol=o?o.vol:cols.length, phi=o?o.phi:0;
+  const wv=waves[i], amp=wv?wv.amp:0, T=performance.now()/1000;
+  ctx.setTransform(DPR,0,0,DPR,0,0); ctx.clearRect(0,0,W,H);
+  if(vol<=0.001 && !(bubbles[i]&&bubbles[i].length)) return;
+  ctx.save(); ctx.translate(W/2,H/2); ctx.rotate(-phi);
+  const poly=polyAt(phi), [,bottom]=polyRange(poly);
+  ctx.beginPath(); poly.forEach((p,k)=>k?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.closePath(); ctx.clip();
+  const n=Math.ceil(vol-1e-4), bound=[bottom+2];
+  for(let k=1;k<=n;k++) bound.push(levelFor(poly, areaForVol(Math.min(k,vol))));
+  const X=Math.max(W,H)+4, top=bound[n];
+  const waveY=x=> top + amp*(0.62*Math.sin(x*0.21+T*7.5+(wv?wv.ph:0)) + 0.38*Math.sin(x*0.47-T*11.3));
+  const surf=()=>{ ctx.moveTo(-X,waveY(-X)); for(let x=-X+3;x<=X;x+=3) ctx.lineTo(x,waveY(x)); };
+  for(let k=0;k<n;k++){
+    const yb=bound[k], yt=bound[k+1];
+    ctx.beginPath();
+    if(k===n-1){ surf(); ctx.lineTo(X,yb); ctx.lineTo(-X,yb); }
+    else { ctx.rect(-X,yt,2*X,yb-yt+0.6); }
+    ctx.closePath();
+    ctx.fillStyle = hid[k] ? 'rgba(150,165,190,.30)' : rgba(PALETTE[cols[k]],.6);
+    ctx.fill();
+    if(hid[k] && !phi){ ctx.fillStyle='rgba(235,242,252,.6)'; ctx.font=`700 ${Math.round(GEO.u*.45)}px system-ui,sans-serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('?',0,(yb+yt)/2); }
+    if(k>0){ ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(-X,yb-0.5,2*X,1); }
+  }
+  if(n>0){
+    // 水面の照り返しと、すぐ下の明るい帯
+    const g=ctx.createLinearGradient(0,top,0,top+7); g.addColorStop(0,'rgba(255,255,255,.22)'); g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g; ctx.fillRect(-X,top,2*X,7);
+    ctx.beginPath(); surf(); ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=1.4; ctx.stroke();
+  }
+  const bs=bubbles[i];
+  if(bs) for(const b of bs){ if(b.y<top+b.r) continue; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.12)'; ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=0.8; ctx.stroke(); }
+  ctx.restore();
+  // 円柱っぽい陰影（ふちは色が濃く、中央に光が通る）
+  ctx.globalCompositeOperation='source-atop';
+  const s=ctx.createLinearGradient(0,0,W,0);
+  s.addColorStop(0,'rgba(0,0,0,.24)'); s.addColorStop(.22,'rgba(255,255,255,.10)'); s.addColorStop(.5,'rgba(255,255,255,0)'); s.addColorStop(1,'rgba(0,0,0,.26)');
+  ctx.fillStyle=s; ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='source-over';
+}
+
+// 揺れ・泡が残っている試験管だけ毎フレーム描き直す
+let lastTick=performance.now();
+function tick(now){
+  const dt=Math.min(0.05,(now-lastTick)/1000); lastTick=now;
+  if(S) for(let i=0;i<canvases.length;i++){
+    const w=waves[i], bs=bubbles[i];
+    let dirty=!!over[i];
+    if(w && w.amp>0){ if(!w.hold) w.amp*=Math.exp(-dt*2.4); if(w.amp<0.04) w.amp=0; dirty=true; }
+    if(bs && bs.length){ for(const b of bs){ b.y-=b.vy*dt; b.x+=Math.sin(now/180+b.r*9)*0.15; } bubbles[i]=bs.filter(b=>b.y>b.top-2); dirty=true; }
+    if(dirty) drawTube(i);
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+function animate(ms,fn){ return new Promise(res=>{ const t0=performance.now();
+  const f=now=>{ const e=Math.min(1,(now-t0)/ms); fn(e,now-t0); if(e<1) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); }); }
+const easeOut=e=>1-Math.pow(1-e,3), easeIO=e=>e<.5?2*e*e:1-Math.pow(-2*e+2,2)/2;
+
+function startLevel(lv){
+  board.innerHTML='<div class="loading">レベルを作っています…</div>';
+  busy=true;
+  setTimeout(()=>{
+    const {cfg,tubes}=generateLevel(lv);
+    S={lv, cap:cfg.cap, colors:cfg.colors, visible:cfg.visible, init:clone(tubes),
+       tubes:clone(tubes), hid:initialHidden(tubes,cfg.visible), history:[],
+       undos:UNDO_MAX, hints:HINT_MAX, added:false, moves:0};
+    data.cur=S; save(); busy=false; buildBoard();
+  },30);
+}
+
+function buildBoard(){
+  sel=null;
+  const n=S.tubes.length, rows = n<=6?1:(n<=14?2:3), per=Math.ceil(n/rows);
+  const W=Math.min(window.innerWidth,640)-32, gap=n>10?10:14;
+  const tw=Math.max(28, Math.min(56, Math.floor((W-gap*(per-1))/per)));
+  const H=board.clientHeight || (window.innerHeight-210);
+  const u=Math.max(18, Math.min(tw*0.85, (H/rows - 46)/S.cap));
+  const r=document.documentElement.style;
+  r.setProperty('--tw',tw+'px'); r.setProperty('--u',u+'px'); r.setProperty('--cap',S.cap); r.setProperty('--gap',gap+'px');
+  board.innerHTML=''; tubeEls=[]; canvases=[]; over=[]; waves=[]; bubbles=[];
+  GEO.W=tw-4; GEO.H=u*S.cap+10; GEO.u=u; GEO.poly0=makePoly(GEO.W,GEO.H);
+  GEO.A=[]; for(let k=0;k<=S.cap;k++) GEO.A.push(areaBelow(GEO.poly0, GEO.H/2 - k*u));
+  for(let ri=0; ri<rows; ri++){
+    const row=document.createElement('div'); row.className='row';
+    for(let i=ri*per; i<Math.min(n,(ri+1)*per); i++){
+      const el=document.createElement('div'); el.className='tube'; el.dataset.i=i;
+      el.innerHTML='<div class="lip"></div><div class="glass"><canvas></canvas></div>';
+      el.addEventListener('pointerdown',e=>{ e.preventDefault(); onTap(i); });
+      const cv=el.querySelector('canvas'); cv.width=Math.round(GEO.W*DPR); cv.height=Math.round(GEO.H*DPR);
+      row.appendChild(el); tubeEls[i]=el; canvases[i]=cv;
+    }
+    board.appendChild(row);
+  }
+  for(let i=0;i<n;i++) renderTube(i);
+  updateUI();
+}
+
+function renderTube(i){
+  const el=tubeEls[i]; if(!el) return;
+  const a=S.tubes[i];
+  drawTube(i);
+  const done=isComplete(a,S.cap);
+  el.classList.toggle('done',done);
+  if(done) el.style.setProperty('--dc',PALETTE[a[0]]);
+}
+
+function updateUI(){
+  $('lvText').textContent='Lv '+S.lv;
+  const tags=[`<span class="tag">${S.colors}色</span>`, `<span class="tag">${S.cap}層</span>`];
+  if(S.visible<S.cap) tags.push(`<span class="tag hid">かくれ色${S.visible===1?'・強':''}</span>`);
+  tags.push(`<span>${S.moves}手</span>`);
+  $('subText').innerHTML=tags.join('');
+  $('nUndo').textContent=`のこり${S.undos}`; $('btnUndo').disabled=!S.undos||!S.history.length;
+  $('nHint').textContent=`のこり${S.hints}`; $('btnHint').disabled=!S.hints;
+  $('nAdd').textContent=S.added?'使用済み':'1回だけ'; $('btnAdd').disabled=S.added;
+}
+
+let toastT=null;
+function toast(msg,ms=2200){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),ms); }
+function shake(i){ const el=tubeEls[i]; el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+function setSel(i){
+  if(sel!==null && tubeEls[sel]){ tubeEls[sel].classList.remove('sel'); shake2(sel,1.2); }
+  sel=i; if(i!==null){ tubeEls[i].classList.add('sel'); shake2(i,1.6); }
+}
+function clearHints(){ tubeEls.forEach(e=>e&&e.classList.remove('hint')); }
+
+function onTap(i){
+  Sound.init();
+  if(busy) return;
+  clearHints();
+  const t=S.tubes;
+  if(sel===null){
+    if(!t[i].length || isComplete(t[i],S.cap)){ Sound.bump(); shake(i); return; }
+    setSel(i); Sound.tok(true); return;
+  }
+  if(sel===i){ setSel(null); Sound.tok(false); return; }
+  if(canPour(t,sel,i,S.cap)){ const from=sel; doPour(from,i); return; }
+  if(t[i].length && !isComplete(t[i],S.cap)){ setSel(i); Sound.tok(true); return; }
+  Sound.bump(); shake(i);
+}
+
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function doPour(i,j){
+  busy=true;
+  S.history.push({tubes:clone(S.tubes), hid:clone(S.hid)});
+  if(S.history.length>60) S.history.shift();
+  const cap=S.cap, amt=pourAmount(S.tubes,i,j,cap), color=S.tubes[i][S.tubes[i].length-1];
+  const sEl=tubeEls[i], tEl=tubeEls[j];
+  const wasLifted=sEl.classList.contains('sel');
+  sEl.style.transition='none'; sEl.classList.remove('sel'); sel=null;
+  sEl.style.transform=wasLifted?'translateY(-18px)':''; void sEl.offsetWidth;
+  const r0=sEl.getBoundingClientRect(), lift=wasLifted?18:0;
+  const sr={left:r0.left,right:r0.right,top:r0.top+lift,width:r0.width};
+  const tr=tEl.getBoundingClientRect(), tcv=canvases[j].getBoundingClientRect();
+  const dir=(tr.left+tr.width/2)>=(sr.left+sr.width/2)?1:-1;
+  sEl.style.transformOrigin=dir>0?'100% 0':'0 0';
+  const P0x=dir>0?sr.right:sr.left, P0y=sr.top;
+  const Ptx=tr.left+tr.width/2 - dir*tr.width*0.14, Pty=tr.top-8;
+  const dx=Ptx-P0x, dy=Pty-P0y;
+
+  const n0=S.tubes[i].length, m0=S.tubes[j].length;
+  const srcHid=S.hid[i].slice(); for(let k=n0-amt;k<n0;k++) srcHid[k]=false;
+  over[i]={colors:S.tubes[i].slice(), hid:srcHid, vol:n0, phi:0};
+  over[j]={colors:S.tubes[j].concat(Array(amt).fill(color)), hid:S.hid[j].concat(Array(amt).fill(false)), vol:m0, phi:0};
+  sEl.style.zIndex=20;
+  let th=0;
+  const setT=(f,deg)=>{ th=deg; sEl.style.transform=`translate(${dx*f}px,${-lift+(dy+lift)*f}px) rotate(${dir*deg}deg)`; over[i].phi=dir*deg*Math.PI/180; };
+
+  // ① 持ち上げて傾ける（液が注ぎ口に届くところまで）
+  const th0=pourAngle(n0,dir);
+  shake2(i,1.5);
+  await animate(340, e=>{ const f=easeOut(e); setT(f, th0*easeIO(e)); });
+
+  // ② 注ぐ
+  const stream=document.createElement('div'); stream.className='stream';
+  const sc=PALETTE[color];
+  stream.style.background=`linear-gradient(90deg,${rgba(sc,.35)},${rgba(sc,.85)} 45%,${rgba(sc,.5)})`;
+  stream.style.left=(Ptx-2.5)+'px'; stream.style.top=Pty+'px'; stream.style.height='0px';
+  document.body.appendChild(stream);
+  const surfY=v=>tcv.top + GEO.H/2 + uprightLevel(v);
+  const localX=Ptx-(tcv.left+GEO.W/2);
+  const dur=amt*270+140;
+  Sound.pour(dur/1000, m0/cap, (m0+amt)/cap);
+  shake2(j,1.6); waves[j].hold=true;
+  bubbles[j]=bubbles[j]||[];
+  let lastB=0;
+  await animate(dur, (e,ms)=>{
+    // 最初の80msは水が落ちていくだけ（まだ届いてない）
+    const fall=Math.min(1,ms/80);
+    const p=amt*easeIO(Math.max(0,(ms-80)/(dur-80)));
+    over[i].vol=n0-p; over[j].vol=m0+p;
+    setT(1, Math.min(140, pourAngle(n0-p,dir)+4));
+    const sy=surfY(m0+p);
+    stream.style.height=Math.max(0,(sy-Pty)*fall)+'px';
+    stream.style.width=(4.2+Math.sin(ms/37)*0.9+Math.sin(ms/13)*0.4)+'px';
+    waves[j].amp=1.4+Math.sin(ms/60)*0.5;
+    if(fall>=1 && ms-lastB>45){ lastB=ms;
+      const top=uprightLevel(m0+p);
+      bubbles[j].push({x:localX+(Math.random()-.5)*4, y:top+5+Math.random()*Math.max(2,Math.min(26,GEO.H/2-top-8)), r:0.8+Math.random()*1.6, vy:22+Math.random()*30, top});
+    }
+  });
+  // 水流の最後尾が落ちていく
+  const sy=surfY(m0+amt);
+  animate(110, e=>{ const top=Pty+(sy-Pty)*e; stream.style.top=top+'px'; stream.style.height=Math.max(0,sy-top)+'px'; }).then(()=>stream.remove());
+  waves[j].hold=false; waves[j].amp=2.2;
+
+  // ③ 戻す
+  const thEnd=th;
+  await animate(300, e=>{ const f=1-easeIO(e); setT(f, thEnd*f); });
+  sEl.style.transform=''; sEl.style.transformOrigin=''; sEl.style.zIndex='';
+  void sEl.offsetWidth; sEl.style.transition='';
+  shake2(i,2.4);
+
+  for(let q=0;q<amt;q++){ S.tubes[j].push(S.tubes[i].pop()); S.hid[i].pop(); S.hid[j].push(false); }
+  // 上を移したら、下に隠れていた色が見える
+  if(S.tubes[i].length) S.hid[i][S.tubes[i].length-1]=false;
+  over[i]=null; over[j]=null;
+  renderTube(i); renderTube(j);
+
+  S.moves++;
+  if(isComplete(S.tubes[j],cap)) Sound.complete();
+  save(); updateUI(); busy=false;
+
+  if(isSolved(S.tubes,cap)) return win();
+  if(!hasAnyMove(S.tubes,cap)) toast('手詰まりかも…「戻す」か「試験管」を使おう',3200);
+}
+
+function win(){
+  busy=true;
+  const lv=S.lv;
+  data.cleared++; data.level=lv+1; data.best=Math.max(data.best,data.level); data.cur=null; save();
+  const next=levelConfig(lv+1), now=levelConfig(lv);
+  let info=`${S.moves}手でクリア`;
+  if(next.colors>now.colors) info+=`<br>次は ${next.colors}色 に増えます`;
+  if(next.visible<now.visible) info+= next.visible===1 ? '<br>次から一番上しか見えません' : '<br>次から下の色が隠れます';
+  if(next.cap>now.cap) info+='<br>次から試験管が5層に';
+  $('clearTitle').textContent=`Lv ${lv} クリア！`;
+  $('clearInfo').innerHTML=info;
+  setTimeout(()=>$('mClear').classList.add('open'),700);
+}
+$('btnNext').onclick=()=>{ Sound.init(); Sound.tok(true); $('mClear').classList.remove('open'); busy=false; startLevel(data.level); };
+
+$('btnUndo').onclick=()=>{
+  Sound.init(); if(busy||!S.undos||!S.history.length) return;
+  const h=S.history.pop(); S.tubes=h.tubes; S.hid=h.hid; S.undos--; S.moves=Math.max(0,S.moves-1);
+  setSel(null); clearHints(); for(let i=0;i<S.tubes.length;i++) renderTube(i);
+  Sound.tok(false); save(); updateUI();
+};
+$('btnAdd').onclick=()=>{
+  Sound.init(); if(busy||S.added) return;
+  S.added=true; S.tubes.push([]); S.hid.push([]); S.history.forEach(h=>{h.tubes.push([]);h.hid.push([]);});
+  Sound.tok(true); save(); buildBoard();
+};
+$('btnRestart').onclick=()=>{
+  Sound.init(); if(busy) return;
+  if(!confirm('このレベルを最初からやり直しますか？')) return;
+  S.tubes=clone(S.init); S.hid=initialHidden(S.init,S.visible); S.history=[]; S.added=false; S.moves=0;
+  save(); buildBoard(); Sound.tok(false);
+};
+$('btnHint').onclick=()=>{
+  Sound.init(); if(busy||!S.hints) return;
+  busy=true; toast('考え中…',900);
+  setTimeout(()=>{
+    const r=solve(S.tubes,S.cap,200000); busy=false;
+    if(r.ok && r.path.length){
+      const [a,b]=r.path[0]; S.hints--; save(); updateUI();
+      setSel(null); [a,b].forEach(k=>{ tubeEls[k].classList.remove('hint'); void tubeEls[k].offsetWidth; tubeEls[k].classList.add('hint'); });
+      Sound.hint(); setSel(a);
+      toast('浮いている試験管から、もう1本の光っている方へ注いでみて',3000);
+    } else if(r.aborted){ toast('この局面は複雑すぎて読み切れない…少し進めてからもう一度',3000); }
+    else { toast('このままだと解けない状態です。「戻す」か「試験管」を使おう',3500); }
+  },60);
+};
+
+// 設定
+function refreshSettings(){ $('vol').value=Math.round(data.vol*100); $('volLabel').textContent=Math.round(data.vol*100); $('btnMute').textContent=data.muted?'🔇 音：オフ（タップでオン）':'🔊 音：オン（タップでオフ）'; }
+$('btnSettings').onclick=()=>{ Sound.init(); refreshSettings(); $('saveCode').value=''; $('mSettings').classList.add('open'); };
+$('btnClose').onclick=()=>$('mSettings').classList.remove('open');
+$('vol').oninput=e=>{ data.vol=e.target.value/100; Sound.vol=data.vol; Sound.applyVol(); refreshSettings(); save(); };
+$('vol').onchange=()=>Sound.pour(0.45,0.2,0.45);
+$('btnMute').onclick=()=>{ data.muted=!data.muted; Sound.muted=data.muted; Sound.applyVol(); refreshSettings(); save(); };
+$('btnExport').onclick=()=>{
+  const d={v:1,level:data.level,best:data.best,cleared:data.cleared};
+  $('saveCode').value='SZK1.'+btoa(JSON.stringify(d)); $('saveCode').select(); toast('コードをコピーして、別の端末で読み込んでね');
+};
+$('btnImport').onclick=()=>{
+  try{
+    const s=$('saveCode').value.trim(); if(!s.startsWith('SZK1.')) throw 0;
+    const d=JSON.parse(atob(s.slice(5)));
+    if(!Number.isInteger(d.level)||d.level<1||d.level>100000) throw 0;
+    data.level=d.level; data.best=Math.max(d.best||d.level,d.level); data.cleared=d.cleared|0; data.cur=null; save();
+    $('mSettings').classList.remove('open'); toast(`Lv ${data.level} から再開します`); startLevel(data.level);
+  }catch(e){ toast('コードが正しくないみたい'); }
+};
+$('btnReset').onclick=()=>{
+  if(!confirm('レベルの進み具合も含めて全部消します。いいですか？')) return;
+  const keep={vol:data.vol,muted:data.muted}; data=Object.assign({},DEFAULT,keep); save();
+  $('mSettings').classList.remove('open'); startLevel(1);
+};
+
+let rz=null; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTimeout(()=>{ if(S&&!busy) buildBoard(); },150); });
+
+// 起動
+Sound.vol=data.vol; Sound.muted=data.muted;
+if(data.cur && data.cur.lv===data.level && data.cur.tubes){ S=data.cur; requestAnimationFrame(buildBoard); }
+else startLevel(data.level);
+</script>
+</body>
+</html>
