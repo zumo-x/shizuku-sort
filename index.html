@@ -23,6 +23,22 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .sub{font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .tag{border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:1px 8px}
 .tag.hid{border-color:rgba(255,220,150,.5);color:#ffe2a8}
+.hbtns{display:flex;gap:8px}
+.lvlist{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px;max-height:55vh;overflow:auto;padding:2px}
+.lvcell{background:var(--glass);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:8px 2px 6px;color:var(--fg);font-family:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px}
+.lvcell b{font-size:16px}
+.lvcell .st{font-size:11px;letter-spacing:-1px;color:#ffd96a;min-height:14px}
+.lvcell .mv{font-size:10px;color:var(--muted)}
+.lvcell.cur{border-color:#ffd96a;box-shadow:0 0 0 1px #ffd96a inset}
+.lvcell.new{border-style:dashed}
+.sumline{display:flex;justify-content:center;gap:14px;font-size:13px;color:var(--muted);margin-top:4px}
+.sumline b{color:var(--fg)}
+.stars{font-size:30px;letter-spacing:4px;margin:4px 0 2px}
+.stars .on{color:#ffd96a;text-shadow:0 0 12px rgba(255,217,106,.6)}
+.stars .off{color:rgba(255,255,255,.18)}
+.newrec{display:inline-block;margin-top:4px;padding:2px 10px;border-radius:999px;background:rgba(255,217,106,.15);color:#ffe7a8;font-size:12px;border:1px solid rgba(255,217,106,.45)}
+.btnrow{display:flex;gap:8px}
+.btnrow .btn{flex:1}
 .iconbtn{background:var(--glass);border:1px solid rgba(255,255,255,.15);color:var(--fg);border-radius:12px;width:42px;height:42px;font-size:20px;cursor:pointer}
 .board{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:34px;min-height:0}
 .row{display:flex;gap:var(--gap);justify-content:center}
@@ -77,7 +93,10 @@ input[type=range]{width:100%;margin-top:6px}
       <div class="lv" id="lvText">Lv 1</div>
       <div class="sub" id="subText"></div>
     </div>
-    <button class="iconbtn" id="btnSettings" aria-label="設定">⚙︎</button>
+    <div class="hbtns">
+      <button class="iconbtn" id="btnLevels" aria-label="レベル一覧">▦</button>
+      <button class="iconbtn" id="btnSettings" aria-label="設定">⚙︎</button>
+    </div>
   </header>
   <div class="board" id="board"><div class="loading">準備中…</div></div>
   <footer>
@@ -101,8 +120,21 @@ input[type=range]{width:100%;margin-top:6px}
 
 <div class="modal" id="mClear"><div class="card">
   <h2 id="clearTitle">クリア！</h2>
+  <div class="stars" id="clearStars"></div>
   <p id="clearInfo"></p>
   <button class="btn" id="btnNext">次のレベルへ</button>
+  <div class="btnrow">
+    <button class="btn ghost" id="btnAgain">もう一回</button>
+    <button class="btn ghost" id="btnToList">レベル一覧</button>
+  </div>
+</div></div>
+
+<div class="modal" id="mLevels"><div class="card">
+  <h2>レベル一覧</h2>
+  <div class="sumline" id="sumLine"></div>
+  <p style="font-size:12px;margin-top:6px">★3＝助っ人なし ／ ★2＝少し使った ／ ★1＝クリア</p>
+  <div class="lvlist" id="lvList"></div>
+  <button class="btn" id="btnLvClose">閉じる</button>
 </div></div>
 
 <div class="modal" id="mSettings"><div class="card">
@@ -332,7 +364,7 @@ const Sound = {
 
 // ===================== セーブデータ =====================
 const KEY='shizuku-sort-v1';
-const DEFAULT={v:1, level:1, best:1, cleared:0, vol:0.7, muted:false, cur:null};
+const DEFAULT={v:1, level:1, best:1, cleared:0, vol:0.7, muted:false, cur:null, rec:{}};   // level＝次に遊べる一番先のレベル、rec＝レベルごとの記録
 let data = (()=>{ try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d && d.v===1) return Object.assign({},DEFAULT,d); }catch(e){} return Object.assign({},DEFAULT); })();
 function save(){
   if(demo) return;   // お手本の最中は記録しない
@@ -357,7 +389,7 @@ const Cloud={
   pack(){
     const cur = data.cur ? Object.assign({}, data.cur, {history:[]}) : null;
     return {level:data.level, best:data.best, cleared:data.cleared, vol:data.vol, muted:!!data.muted,
-            t:data.t||0, cur: cur?JSON.stringify(cur):''};
+            t:data.t||0, cur: cur?JSON.stringify(cur):'', rec: JSON.stringify(data.rec||{})};
   },
   push(){
     if(!this.ref) return;
@@ -588,7 +620,8 @@ function updateUI(){
   const sets=S.init.filter(a=>a.length).length;
   const tags=[`<span class="tag">${S.colors}色</span>`, `<span class="tag">${sets}本</span>`, `<span class="tag">${S.cap}層</span>`];
   if(S.visible<S.cap) tags.push(`<span class="tag hid">かくれ色${S.visible===1?'・強':''}</span>`);
-  tags.push(`<span>${S.moves}手</span>`);
+  const rc=(data.rec||{})[S.lv];
+  tags.push(`<span>${S.moves}手${rc?`（ベスト${rc.best}）`:''}</span>`);
   $('subText').innerHTML=tags.join('');
   $('nUndo').textContent=`のこり${S.undos}`; $('btnUndo').disabled=!S.undos||!S.history.length;
   $('nHint').textContent=`のこり${S.hints}`; $('btnHint').disabled=!S.hints;
@@ -743,22 +776,67 @@ function celebrate(){
     if(alive) requestAnimationFrame(f); else ctx.clearRect(0,0,W,H);
   })(t0);
 }
+// 星：助っ人（戻す・ヒント・試験管追加・お手本）を使わなければ★3
+function starsFor(st){
+  const helps=(UNDO_MAX-st.undos)+(HINT_MAX-st.hints)+(st.added?1:0);
+  if(st.watched) return 1;
+  return helps===0 ? 3 : (helps<=2 ? 2 : 1);
+}
+function starHtml(n){ return [1,2,3].map(k=>`<span class="${k<=n?'on':'off'}">★</span>`).join(''); }
 function win(){
   busy=true;
-  const lv=S.lv;
-  data.cleared++; data.level=lv+1; data.best=Math.max(data.best,data.level); data.cur=null; save();
+  const lv=S.lv, stars=starsFor(S);
+  if(!data.rec) data.rec={};
+  const old=data.rec[lv];
+  const newBest = !old || S.moves < old.best;
+  data.rec[lv]={ best: old?Math.min(old.best,S.moves):S.moves, stars: Math.max(old?old.stars:0, stars), plays:(old?old.plays:0)+1 };
+  data.cleared++;
+  if(lv>=data.level) data.level=lv+1;
+  data.best=Math.max(data.best,data.level); data.cur=null; save();
   const next=levelConfig(lv+1), now=levelConfig(lv);
-  let info=`${S.moves}手でクリア`;
+  let info=`${S.moves}手でクリア` + (old ? `（これまでのベスト ${old.best}手）` : '');
+  if(newBest && old) info+=`<br><span class="newrec">新記録！</span>`;
   if(next.colors>now.colors) info+=`<br>次は ${next.colors}色 に増えます`;
   else if(next.sets>now.sets) info+=`<br>次は試験管が1本増えます（同じ色が2本あるかも）`;
   if(next.visible<now.visible) info+= next.visible===1 ? '<br>次から一番上しか見えません' : '<br>次から下の色が隠れます';
   if(next.cap>now.cap) info+='<br>次から試験管が5層に';
   $('clearTitle').textContent=`Lv ${lv} クリア！`;
+  $('clearStars').innerHTML=starHtml(stars);
   $('clearInfo').innerHTML=info;
+  lastClear=lv;
   celebrate();
   setTimeout(()=>$('mClear').classList.add('open'),1500);
 }
-$('btnNext').onclick=()=>{ Sound.init(); Sound.tok(true); $('mClear').classList.remove('open'); busy=false; startLevel(data.level); };
+let lastClear=1;
+$('btnNext').onclick=()=>{ Sound.init(); Sound.tok(true); $('mClear').classList.remove('open'); busy=false; startLevel(lastClear+1); };
+$('btnAgain').onclick=()=>{ Sound.init(); Sound.tok(true); $('mClear').classList.remove('open'); busy=false; startLevel(lastClear); };
+$('btnToList').onclick=()=>{ Sound.init(); $('mClear').classList.remove('open'); busy=false; startLevel(lastClear+1); setTimeout(openLevels,80); };
+
+// レベル一覧：遊んだレベルをもう一回・前のレベルに戻る
+function openLevels(){
+  const rec=data.rec||{}, max=data.level;
+  let stars=0, cleared=0; for(const k in rec){ stars+=rec[k].stars||0; cleared++; }
+  $('sumLine').innerHTML=`<span>クリア <b>${cleared}</b> レベル</span><span>★ <b>${stars}</b></span><span>最高 <b>Lv ${max-1}</b></span>`;
+  const list=$('lvList'); list.innerHTML='';
+  for(let lv=1; lv<=max; lv++){
+    const r=rec[lv], b=document.createElement('button');
+    b.className='lvcell'+(S&&S.lv===lv?' cur':'')+(lv===max?' new':'');
+    b.innerHTML=`<b>${lv}</b><span class="st">${r?'★'.repeat(r.stars)+'☆'.repeat(3-r.stars):''}</span><span class="mv">${r?'ベスト'+r.best+'手':(lv<max?'クリア済':'未クリア')}</span>`;
+    b.onclick=()=>pickLevel(lv);
+    list.appendChild(b);
+  }
+  $('mLevels').classList.add('open');
+  const cur=list.querySelector('.cur'); if(cur) cur.scrollIntoView({block:'center'});
+}
+async function pickLevel(lv){
+  Sound.init(); Sound.tok(true);
+  $('mLevels').classList.remove('open');
+  if(S && S.lv===lv && S.moves===0) return;
+  if(S && S.moves>0 && !await ask(`Lv ${S.lv} の途中です。Lv ${lv} を${S.lv===lv?'最初から':''}遊びますか？`, S.lv===lv?'最初から':'遊ぶ')) return;
+  startLevel(lv);
+}
+$('btnLevels').onclick=()=>{ Sound.init(); if(busy||demo) return; openLevels(); };
+$('btnLvClose').onclick=()=>$('mLevels').classList.remove('open');
 
 $('btnUndo').onclick=()=>{
   Sound.init(); if(busy||!S.undos||!S.history.length) return;
@@ -786,7 +864,7 @@ $('btnDemo').onclick=async()=>{
   const sol=solve(S.init,S.cap,300000);
   if(!sol.ok){ toast('お手本を作れませんでした'); return; }
   const backup={tubes:clone(S.tubes), hid:clone(S.hid), history:S.history.map(h=>({tubes:clone(h.tubes),hid:clone(h.hid)})), added:S.added, moves:S.moves};
-  demo=true; demoStop=false; document.body.classList.add('demo'); $('demoBar').classList.add('on');
+  S.watched=true; demo=true; demoStop=false; document.body.classList.add('demo'); $('demoBar').classList.add('on');
   $('btnDemo').querySelector('b').textContent='■';
   S.tubes=clone(S.init); S.hid=initialHidden(S.init,S.visible); S.history=[]; S.added=false; S.moves=0;
   buildBoard(); updateUI();
@@ -802,7 +880,7 @@ $('btnDemo').onclick=async()=>{
   // 自分の状態に戻す
   demo=false; demoStop=false; document.body.classList.remove('demo'); $('demoBar').classList.remove('on');
   $('btnDemo').querySelector('b').textContent='▶';
-  Object.assign(S, backup); busy=false;
+  Object.assign(S, backup, {watched:true}); busy=false;
   buildBoard(); updateUI();
   toast('お手本おわり。続きからどうぞ',2000);
 };
@@ -830,7 +908,7 @@ $('vol').oninput=e=>{ data.vol=e.target.value/100; Sound.vol=data.vol; Sound.app
 $('vol').onchange=()=>Sound.pour(0.45,0.2,0.45);
 $('btnMute').onclick=()=>{ data.muted=!data.muted; Sound.muted=data.muted; Sound.applyVol(); refreshSettings(); save(); };
 $('btnExport').onclick=()=>{
-  const d={v:1,level:data.level,best:data.best,cleared:data.cleared};
+  const d={v:1,level:data.level,best:data.best,cleared:data.cleared,rec:data.rec||{}};
   $('saveCode').value='SZK1.'+btoa(JSON.stringify(d)); $('saveCode').select(); toast('コードをコピーして、別の端末で読み込んでね');
 };
 $('btnImport').onclick=()=>{
@@ -838,7 +916,7 @@ $('btnImport').onclick=()=>{
     const s=$('saveCode').value.trim(); if(!s.startsWith('SZK1.')) throw 0;
     const d=JSON.parse(atob(s.slice(5)));
     if(!Number.isInteger(d.level)||d.level<1||d.level>100000) throw 0;
-    data.level=d.level; data.best=Math.max(d.best||d.level,d.level); data.cleared=d.cleared|0; data.cur=null; save();
+    data.level=d.level; data.best=Math.max(d.best||d.level,d.level); data.cleared=d.cleared|0; data.rec=(d.rec&&typeof d.rec==='object')?d.rec:{}; data.cur=null; save();
     $('mSettings').classList.remove('open'); toast(`Lv ${data.level} から再開します`); startLevel(data.level);
   }catch(e){ toast('コードが正しくないみたい'); }
 };
@@ -853,7 +931,8 @@ let rz=null; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTime
 
 // 起動
 Sound.vol=data.vol; Sound.muted=data.muted;
-if(data.cur && data.cur.lv===data.level && data.cur.tubes){ S=data.cur; requestAnimationFrame(buildBoard); }
+if(!data.rec) data.rec={};
+if(data.cur && data.cur.lv<=data.level && data.cur.tubes){ S=data.cur; requestAnimationFrame(buildBoard); }
 else startLevel(data.level);
 
 // クラウドの記録の方が新しければ、そちらで続きから
@@ -863,12 +942,13 @@ else startLevel(data.level);
   const localT=data.t||0;
   if(c && (c.t||0) > localT && Number.isInteger(c.level) && c.level>=1){
     let cur=null; try{ cur=c.cur?JSON.parse(c.cur):null; }catch(e){}
+    let rec={}; try{ rec=c.rec?JSON.parse(c.rec):{}; }catch(e){}
     Object.assign(data,{level:c.level, best:Math.max(c.best||1,c.level), cleared:c.cleared|0,
-      vol:typeof c.vol==='number'?c.vol:data.vol, muted:!!c.muted, t:c.t, cur});
+      vol:typeof c.vol==='number'?c.vol:data.vol, muted:!!c.muted, t:c.t, cur, rec});
     try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){}
     Sound.vol=data.vol; Sound.muted=data.muted; Sound.applyVol();
     const go=()=>{ if(busy){ setTimeout(go,300); return; }
-      if(data.cur && data.cur.lv===data.level && data.cur.tubes){ S=data.cur; buildBoard(); } else startLevel(data.level); };
+      if(data.cur && data.cur.lv<=data.level && data.cur.tubes){ S=data.cur; buildBoard(); } else startLevel(data.level); };
     go();
   } else {
     Cloud.push();   // 手元の方が新しい（または初回）ならクラウドへ
