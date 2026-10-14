@@ -122,15 +122,17 @@ input[type=range]{width:100%;margin-top:6px}
 // 液の色（R G B）。濁った色は使わず、宝石のように澄んだ色だけにする
 const PALETTE = ['255 70 85','255 150 40','255 220 50','160 230 60','30 200 110','30 210 200',
                  '80 185 255','60 100 255','150 90 255','255 100 200','235 238 248','190 30 90'];
+const MAX_COLORS = 12;   // 色は12色まで。それ以降は本数が増えて、同じ色の試験管が何本かできる
 
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
 // レベルごとの難しさ
 function levelConfig(lv){
-  const colors  = Math.min(12, 3 + Math.floor((lv-1)/3));   // 3色 → 最大12色
+  const sets    = Math.min(16, 3 + Math.floor((lv-1)/3));   // そろえる本数：3本 → 最大16本
+  const colors  = Math.min(MAX_COLORS, sets);              // 色は12色まで。それ以降は同じ色の試験管が何本かできる
   const cap     = lv >= 36 ? 5 : 4;                          // Lv36〜 1本5層に
   const visible = lv < 8 ? cap : (lv < 15 ? 2 : 1);          // Lv8〜 下が隠れる / Lv15〜 一番上しか見えない
-  return {colors, cap, empty: 2, visible};
+  return {colors, sets, cap, empty: 2, visible};
 }
 
 function topRun(a){ if(!a.length) return 0; const c=a[a.length-1]; let r=1; while(r<a.length && a[a.length-1-r]===c) r++; return r; }
@@ -192,13 +194,16 @@ function solve(start, cap, limit=150000){
 function generateLevel(lv){
   const cfg=levelConfig(lv);
   const rnd=mulberry32(((lv*2654435761)>>>0) ^ 0x5bd1e995);
-  const maxPairs=Math.max(1, Math.floor(cfg.colors*0.3));
+  const maxPairs=Math.max(1, Math.floor(cfg.sets*0.3));
   const wantNodes = lv<4 ? 0 : Math.min(1500, lv*35);   // ソルバーが「迷った量」= 難しさの目安
+  // このレベルで使う色を12色の中から選ぶ（レベルごとに顔ぶれが変わる）
+  const pick=[...Array(PALETTE.length).keys()];
+  for(let i=pick.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [pick[i],pick[j]]=[pick[j],pick[i]]; }
   let best=null;
   for(let at=0; at<400; at++){
-    const balls=[]; for(let c=0;c<cfg.colors;c++) for(let k=0;k<cfg.cap;k++) balls.push(c);
+    const balls=[]; for(let c=0;c<cfg.sets;c++) for(let k=0;k<cfg.cap;k++) balls.push(pick[c % cfg.colors]);
     for(let i=balls.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [balls[i],balls[j]]=[balls[j],balls[i]]; }
-    const tubes=[]; for(let i=0;i<cfg.colors;i++) tubes.push(balls.slice(i*cfg.cap,(i+1)*cfg.cap));
+    const tubes=[]; for(let i=0;i<cfg.sets;i++) tubes.push(balls.slice(i*cfg.cap,(i+1)*cfg.cap));
     for(let e=0;e<cfg.empty;e++) tubes.push([]);
     let pairs=0, bad=false;
     for(const a of tubes) for(let k=1;k<a.length;k++){ if(a[k]===a[k-1]){ pairs++; if(k>=2 && a[k]===a[k-2]) bad=true; } }
@@ -578,7 +583,8 @@ let building=false;
 
 function updateUI(){
   $('lvText').textContent='Lv '+S.lv;
-  const tags=[`<span class="tag">${S.colors}色</span>`, `<span class="tag">${S.cap}層</span>`];
+  const sets=S.init.filter(a=>a.length).length;
+  const tags=[`<span class="tag">${S.colors}色</span>`, `<span class="tag">${sets}本</span>`, `<span class="tag">${S.cap}層</span>`];
   if(S.visible<S.cap) tags.push(`<span class="tag hid">かくれ色${S.visible===1?'・強':''}</span>`);
   tags.push(`<span>${S.moves}手</span>`);
   $('subText').innerHTML=tags.join('');
@@ -742,6 +748,7 @@ function win(){
   const next=levelConfig(lv+1), now=levelConfig(lv);
   let info=`${S.moves}手でクリア`;
   if(next.colors>now.colors) info+=`<br>次は ${next.colors}色 に増えます`;
+  else if(next.sets>now.sets) info+=`<br>次は試験管が1本増えます（同じ色が2本あるかも）`;
   if(next.visible<now.visible) info+= next.visible===1 ? '<br>次から一番上しか見えません' : '<br>次から下の色が隠れます';
   if(next.cap>now.cap) info+='<br>次から試験管が5層に';
   $('clearTitle').textContent=`Lv ${lv} クリア！`;
