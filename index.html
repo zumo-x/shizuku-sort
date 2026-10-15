@@ -166,8 +166,11 @@ function levelConfig(lv){
   const sets    = Math.min(18, 3 + Math.floor((lv-1)/3));   // そろえる本数：3本 → 最大18本（Lv46〜）
   const colors  = Math.min(MAX_COLORS, sets);              // 色は12色まで。それ以降は同じ色の試験管が何本かできる
   const cap     = lv >= 36 ? 5 : 4;                          // Lv36〜 1本5層に
-  const visible = lv < 8 ? cap : (lv < 15 ? 2 : 1);          // Lv8〜 下が隠れる / Lv15〜 一番上しか見えない
-  return {colors, sets, cap, empty: 2, visible};
+  // 色が隠れる試験管は「数本だけ」。全部隠すと運まかせになるので、全体の4割までにする
+  //  Lv10〜 1本（上2つは見える） → 12レベルごとに1本ずつ増える → Lv30〜 隠れた試験管は一番上だけ見える
+  const hiddenTubes = lv < 10 ? 0 : Math.min(Math.floor(sets*0.4), 1 + Math.floor((lv-10)/12));
+  const visible = hiddenTubes===0 ? cap : (lv < 30 ? 2 : 1);   // 隠れた試験管で見える層の数
+  return {colors, sets, cap, empty: 2, visible, hiddenTubes};
 }
 
 function topRun(a){ if(!a.length) return 0; const c=a[a.length-1]; let r=1; while(r<a.length && a[a.length-1-r]===c) r++; return r; }
@@ -225,6 +228,16 @@ function solve(start, cap, limit=150000){
   return {ok, path: ok?path.slice():null, aborted, nodes};
 }
 
+// どの試験管の色を隠すか（レベルごとに固定）。hv[i]＝その試験管で見える層の数
+function pickHidden(cfg, tubes, lv){
+  const hv=tubes.map(()=>cfg.cap);
+  if(!cfg.hiddenTubes) return hv;
+  const rnd=mulberry32(lv*7919+17), idx=[];
+  tubes.forEach((a,i)=>{ if(a.length) idx.push(i); });
+  for(let i=idx.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [idx[i],idx[j]]=[idx[j],idx[i]]; }
+  idx.slice(0,cfg.hiddenTubes).forEach(i=>hv[i]=cfg.visible);
+  return hv;
+}
 // レベル生成：同じレベル番号なら誰がやっても同じ盤面（友だちと比べられる）
 function generateLevel(lv){
   const cfg=levelConfig(lv);
@@ -248,9 +261,9 @@ function generateLevel(lv){
     const r=solve(tubes,cfg.cap,80000);
     if(!r.ok) continue;
     if(!best || r.nodes>best.nodes) best={tubes,nodes:r.nodes};
-    if(r.nodes >= wantNodes*Math.max(0.3, 1-at/300)) return {cfg, tubes};
+    if(r.nodes >= wantNodes*Math.max(0.3, 1-at/300)) return {cfg, tubes, hv: pickHidden(cfg, tubes, lv)};
   }
-  return {cfg, tubes: best.tubes};
+  return {cfg, tubes: best.tubes, hv: pickHidden(cfg, best.tubes, lv)};
 }
 // ===================== CORE-END =====================
 
@@ -417,7 +430,7 @@ const UNDO_MAX=5, HINT_MAX=3;
 let S=null, tubeEls=[], sel=null, busy=false, demo=false, demoStop=false;
 
 function clone(t){ return t.map(a=>a.slice()); }
-function initialHidden(tubes,visible){ return tubes.map(a=>a.map((c,k)=>k < a.length-visible)); }
+function initialHidden(tubes,hv){ return tubes.map((a,i)=>a.map((c,k)=>k < a.length-(Array.isArray(hv)?(hv[i]??99):hv))); }
 
 // ===================== 液体の描画（キャンバス） =====================
 // 試験管を傾けても水面は常に水平・量は一定、になるように形から計算して描く
@@ -561,9 +574,9 @@ function startLevel(lv){
   board.innerHTML='<div class="loading">レベルを作っています…</div>';
   busy=true;
   setTimeout(()=>{
-    const {cfg,tubes}=generateLevel(lv);
-    S={lv, cap:cfg.cap, colors:cfg.colors, visible:cfg.visible, init:clone(tubes),
-       tubes:clone(tubes), hid:initialHidden(tubes,cfg.visible), history:[],
+    const {cfg,tubes,hv}=generateLevel(lv);
+    S={lv, cap:cfg.cap, colors:cfg.colors, visible:cfg.visible, hv, init:clone(tubes),
+       tubes:clone(tubes), hid:initialHidden(tubes,hv), history:[],
        undos:UNDO_MAX, hints:HINT_MAX, added:false, moves:0};
     data.cur=S; save(); busy=false; buildBoard();
   },30);
@@ -623,7 +636,8 @@ function updateUI(){
   $('lvText').innerHTML='Lv '+S.lv+` <span class="hstars">${rcH?starHtml(rcH.stars):starHtml(0)}</span>`;
   const sets=S.init.filter(a=>a.length).length;
   const tags=[`<span class="tag">${S.colors}色</span>`, `<span class="tag">${sets}本</span>`, `<span class="tag">${S.cap}層</span>`];
-  if(S.visible<S.cap) tags.push(`<span class="tag hid">かくれ色${S.visible===1?'・強':''}</span>`);
+  const nh=(S.hv||[]).filter(v=>v<S.cap).length;
+  if(nh) tags.push(`<span class="tag hid">かくれ ${nh}本</span>`);
   const rc=(data.rec||{})[S.lv];
   tags.push(`<span>${S.moves}手${rc?`（ベスト${rc.best}）`:''}</span>`);
   $('subText').innerHTML=tags.join('');
@@ -802,7 +816,8 @@ function win(){
   if(newBest && old) info+=`<br><span class="newrec">新記録！</span>`;
   if(next.colors>now.colors) info+=`<br>次は ${next.colors}色 に増えます`;
   else if(next.sets>now.sets) info+=`<br>次は試験管が1本増えます（同じ色が2本あるかも）`;
-  if(next.visible<now.visible) info+= next.visible===1 ? '<br>次から一番上しか見えません' : '<br>次から下の色が隠れます';
+  if(next.hiddenTubes>now.hiddenTubes) info+= now.hiddenTubes===0 ? '<br>次から色が隠れた試験管が出てきます' : '<br>次から隠れた試験管が1本増えます';
+  if(now.hiddenTubes && next.visible<now.visible) info+='<br>隠れた試験管は一番上しか見えなくなります';
   if(next.cap>now.cap) info+='<br>次から試験管が5層に';
   $('clearTitle').textContent=`Lv ${lv} クリア！`;
   $('clearStars').innerHTML=starHtml(stars);
@@ -857,7 +872,7 @@ $('btnRestart').onclick=async()=>{
   Sound.init(); if(busy) return;
   if(!await ask('このレベルを最初からやり直しますか？','やり直す')) return;
   if(busy) return;
-  S.tubes=clone(S.init); S.hid=initialHidden(S.init,S.visible); S.history=[]; S.added=false; S.moves=0;
+  S.tubes=clone(S.init); S.hid=initialHidden(S.init,S.hv||S.visible); S.history=[]; S.added=false; S.moves=0;
   save(); buildBoard(); Sound.tok(false);
 };
 // お手本：今のレベルを最初から自動で解いて見せる。終わったら自分の途中の状態に戻す
@@ -870,7 +885,7 @@ $('btnDemo').onclick=async()=>{
   const backup={tubes:clone(S.tubes), hid:clone(S.hid), history:S.history.map(h=>({tubes:clone(h.tubes),hid:clone(h.hid)})), added:S.added, moves:S.moves};
   S.watched=true; demo=true; demoStop=false; document.body.classList.add('demo'); $('demoBar').classList.add('on');
   $('btnDemo').querySelector('b').textContent='■';
-  S.tubes=clone(S.init); S.hid=initialHidden(S.init,S.visible); S.history=[]; S.added=false; S.moves=0;
+  S.tubes=clone(S.init); S.hid=initialHidden(S.init,S.hv||S.visible); S.history=[]; S.added=false; S.moves=0;
   buildBoard(); updateUI();
   await wait(700);
   for(const [a,b] of sol.path){
@@ -936,8 +951,8 @@ let rz=null; window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTime
 // 起動
 Sound.vol=data.vol; Sound.muted=data.muted;
 if(!data.rec) data.rec={};
-if(data.cur && data.cur.lv<=data.level && data.cur.tubes){ S=data.cur; requestAnimationFrame(buildBoard); }
-else startLevel(data.level);
+if(data.cur && data.cur.lv<=data.level && data.cur.tubes && data.cur.hv){ S=data.cur; requestAnimationFrame(buildBoard); }
+else startLevel(data.cur && data.cur.lv<=data.level ? data.cur.lv : data.level);   // 古いルールで保存された途中の盤面は、新しいルールで作り直す
 
 // クラウドの記録の方が新しければ、そちらで続きから
 (async()=>{
@@ -952,7 +967,7 @@ else startLevel(data.level);
     try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){}
     Sound.vol=data.vol; Sound.muted=data.muted; Sound.applyVol();
     const go=()=>{ if(busy){ setTimeout(go,300); return; }
-      if(data.cur && data.cur.lv<=data.level && data.cur.tubes){ S=data.cur; buildBoard(); } else startLevel(data.level); };
+      if(data.cur && data.cur.lv<=data.level && data.cur.tubes && data.cur.hv){ S=data.cur; buildBoard(); } else startLevel(data.cur && data.cur.lv<=data.level ? data.cur.lv : data.level); };
     go();
   } else {
     Cloud.push();   // 手元の方が新しい（または初回）ならクラウドへ
