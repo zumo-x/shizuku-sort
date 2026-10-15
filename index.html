@@ -498,6 +498,15 @@ function drawTube(i){
   const n=Math.ceil(vol-1e-4), bound=[bottom+2];
   for(let k=1;k<=n;k++) bound.push(levelFor(poly, areaForVol(Math.min(k,vol))));
   const X=Math.max(W,H)+4, top=bound[n];
+  // 試験管の奥の光の筋（液を通して透けて見える＝透明感）
+  const ax=rot([1,0],phi), L0=rot([-W/2,0],phi), L1=rot([W/2,0],phi);
+  { const g=ctx.createLinearGradient(L0[0],L0[1],L1[0],L1[1]);
+    g.addColorStop(0,'rgba(255,255,255,0)'); g.addColorStop(.62,'rgba(255,255,255,0)'); g.addColorStop(.72,'rgba(220,235,255,.22)'); g.addColorStop(.8,'rgba(255,255,255,0)'); g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g; ctx.fillRect(-X,-X,2*X,2*X); }
+  // 液の色：ふちは濃く、中央は透けて明るい（色水を入れたガラス管の見え方）
+  const liquidFill=(c,boost)=>{ const g=ctx.createLinearGradient(L0[0],L0[1],L1[0],L1[1]), lc=lighten(c,.18);
+    g.addColorStop(0,rgba(c,.82+boost)); g.addColorStop(.18,rgba(c,.58+boost)); g.addColorStop(.42,rgba(lc,.40+boost));
+    g.addColorStop(.62,rgba(c,.46+boost)); g.addColorStop(.86,rgba(c,.62+boost)); g.addColorStop(1,rgba(c,.86+boost)); return g; };
   const waveY=x=> top + amp*(0.62*Math.sin(x*0.21+T*7.5+(wv?wv.ph:0)) + 0.38*Math.sin(x*0.47-T*11.3));
   const surf=()=>{ ctx.moveTo(-X,waveY(-X)); for(let x=-X+3;x<=X;x+=3) ctx.lineTo(x,waveY(x)); };
   for(let k=0;k<n;k++){
@@ -508,7 +517,7 @@ function drawTube(i){
     ctx.closePath();
     const rv=revealFx[i] && !o && revealFx[i].was[k] ? Math.max(0,Math.min(1,(now-revealFx[i].start-(n-1-k)*110)/300)) : 1;
     if(rv<1){ ctx.fillStyle='rgba(150,165,190,.30)'; ctx.globalAlpha=1-rv; ctx.fill(); ctx.globalAlpha=rv; }
-    ctx.fillStyle = hid[k] ? 'rgba(150,165,190,.30)' : rgba(vivid(PALETTE[cols[k]],kD), .74+0.16*kD);
+    ctx.fillStyle = hid[k] ? 'rgba(150,165,190,.30)' : liquidFill(vivid(PALETTE[cols[k]],kD), 0.12*kD);
     ctx.fill(); ctx.globalAlpha=1;
     if(rv<1 && !phi){ ctx.fillStyle=`rgba(235,242,252,${.6*(1-rv)})`; ctx.font=`700 ${Math.round(GEO.u*.45)}px system-ui,sans-serif`;
       ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('?',0,(yb+yt)/2); }
@@ -547,7 +556,7 @@ function drawTube(i){
   // 円柱っぽい陰影（ふちは色が濃く、中央に光が通る）
   ctx.globalCompositeOperation='source-atop';
   const s=ctx.createLinearGradient(0,0,W,0);
-  s.addColorStop(0,'rgba(0,0,0,.16)'); s.addColorStop(.22,'rgba(255,255,255,.10)'); s.addColorStop(.5,'rgba(255,255,255,0)'); s.addColorStop(1,'rgba(0,0,0,.18)');
+  s.addColorStop(0,'rgba(0,0,0,.06)'); s.addColorStop(.22,'rgba(255,255,255,.12)'); s.addColorStop(.5,'rgba(255,255,255,0)'); s.addColorStop(1,'rgba(0,0,0,.07)');
   ctx.fillStyle=s; ctx.fillRect(0,0,W,H);
   ctx.globalCompositeOperation='source-over';
 }
